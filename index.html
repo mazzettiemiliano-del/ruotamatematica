@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tombola della Matematica - Ruota della Fortuna</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Nunito:wght@400;700;800&display=swap');
+
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%);
+      min-height: 100vh;
+      color: #f8fafc;
+    }
+
+    h1, h2, h3, .font-heading {
+      font-family: 'Fredoka', cursive;
+    }
+
+    .wheel-shadow {
+      filter: drop-shadow(0px 10px 25px rgba(0, 0, 0, 0.6));
+    }
+
+    /* AREA STAMPA SCHEDE PDF REGOLE RIGIDE */
+    #printArea {
+      display: none;
+    }
+
+    @media print {
+      @page {
+        size: A4 landscape;
+        margin: 8mm;
+      }
+
+      body * {
+        visibility: hidden !important;
+      }
+
+      #printArea, #printArea * {
+        visibility: visible !important;
+      }
+
+      #printArea {
+        display: block !important;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        background: white !important;
+        color: black !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      
+      .page-container {
+        page-break-after: always;
+        page-break-inside: avoid;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        box-sizing: border-box;
+        padding: 10px;
+      }
+
+      .card-print {
+        border: 3px solid #000;
+        padding: 18px;
+        border-radius: 12px;
+        background: #fff;
+        box-sizing: border-box;
+        width: 100%;
+        height: 98%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 3px solid #000;
+        padding-bottom: 8px;
+        margin-bottom: 12px;
+      }
+
+      .tombola-table {
+        width: 100%;
+        height: 80%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+
+      .tombola-table td {
+        border: 2px solid #000 !important;
+        text-align: center;
+        vertical-align: middle;
+        font-weight: 800;
+        font-size: 16pt;
+        font-family: sans-serif;
+        word-wrap: break-word;
+        padding: 6px;
+      }
+
+      .tombola-table td.empty-cell {
+        background-color: #f1f5f9 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <!-- INTESTAZIONE -->
+  <header class="bg-slate-900/80 backdrop-blur border-b border-indigo-500/30 p-4 sticky top-0 z-20">
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div class="flex items-center gap-3">
+        <div class="bg-indigo-600 p-3 rounded-xl text-white shadow-lg">
+          <i class="fa-solid fa-graduation-cap text-2xl"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold text-indigo-300">Tombola della Matematica</h1>
+          <p class="text-xs text-slate-400">Classe 5ª Elementare • Ruota della Fortuna</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button onclick="generatePrintableCards()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 rounded-xl shadow-lg transition flex items-center gap-2 text-sm">
+          <i class="fa-solid fa-print"></i>
+          <span>Stampa Schede PDF</span>
+        </button>
+        <button onclick="resetGame()" class="bg-rose-600/80 hover:bg-rose-600 text-white font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 text-sm">
+          <i class="fa-solid fa-rotate-right"></i>
+          <span>Reset</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTENUTO PRINCIPALE -->
+  <main class="flex-1 max-w-6xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    
+    <!-- SEZIONE RUOTA (SINISTRA) -->
+    <div class="lg:col-span-8 bg-slate-800/60 border border-slate-700/60 rounded-3xl p-6 flex flex-col items-center relative overflow-hidden backdrop-blur">
+      
+      <div class="w-full flex justify-between items-center mb-4">
+        <div class="bg-slate-900/80 px-4 py-2 rounded-xl border border-indigo-500/30 text-sm font-semibold text-indigo-300">
+          Spicchi Rimanenti: <span id="remainingCount" class="text-amber-400 font-bold text-lg">0</span> / <span id="totalCount">0</span>
+        </div>
+      </div>
+
+      <!-- CANVAS RUOTA -->
+      <div class="relative w-full max-w-[420px] aspect-square flex items-center justify-center my-2">
+        <!-- FRECCETTA INDICATORE -->
+        <div class="absolute -top-3 left-1/2 -translate-x-1/2 z-10 filter drop-shadow-md">
+          <div class="w-0 h-0 border-l-[18px] border-l-transparent border-r-[18px] border-r-transparent border-t-[32px] border-t-amber-400"></div>
+        </div>
+
+        <canvas id="wheelCanvas" width="500" height="500" class="w-full h-full rounded-full wheel-shadow"></canvas>
+      </div>
+
+      <!-- PULSANTE GIRA -->
+      <button id="spinBtn" onclick="spinWheel()" class="mt-6 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xl px-10 py-4 rounded-2xl shadow-xl hover:shadow-amber-500/20 active:scale-95 transition transform flex items-center gap-3">
+        <i class="fa-solid fa-play"></i>
+        <span>GIRA LA RUOTA!</span>
+      </button>
+    </div>
+
+    <!-- SEZIONE CRONOLOGIA (DESTRA) -->
+    <div class="lg:col-span-4 bg-slate-800/60 border border-slate-700/60 rounded-3xl p-6 backdrop-blur flex flex-col h-full min-h-[400px]">
+      <h2 class="text-lg font-bold text-indigo-300 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span>Quesiti Estratti</span>
+      </h2>
+
+      <div class="flex-1 overflow-y-auto max-h-[480px] pr-2">
+        <ul id="historyList" class="space-y-2.5">
+          <li class="text-slate-500 italic text-sm text-center py-8">Nessun quesito estratto finora.</li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <!-- MODALE RISULTATO -->
+  <div id="resultModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+    <div class="bg-slate-900 border-2 border-indigo-500/50 rounded-3xl p-6 md:p-8 max-w-lg w-full text-center shadow-2xl transform scale-90 transition-transform duration-300">
+      
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-400 mb-4 border border-amber-500/30">
+        <i class="fa-solid fa-circle-question text-3xl"></i>
+      </div>
+
+      <h3 class="text-indigo-400 font-bold uppercase tracking-wider text-sm mb-2">Quesito Estratto</h3>
+      
+      <!-- TESTO DELLA DOMANDA -->
+      <div id="modalQuestion" class="text-2xl md:text-3xl font-extrabold text-white my-6 leading-relaxed">
+        ...
+      </div>
+
+      <p class="text-slate-400 text-xs mb-6 bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
+        Calcola la risposta e verifica se è presente sulla tua scheda 5x5!
+      </p>
+
+      <button onclick="closeModal()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition">
+        OK, Ho Controllato!
+      </button>
+    </div>
+  </div>
+
+  <!-- SEZIONE STAMPA SEPARATA -->
+  <div id="printArea"></div>
+
+  <script>
+    // EFFETTI SONORI (WEB AUDIO API)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playTickSound() {
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.05);
+
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.05);
+    }
+
+    function playWinSound() {
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      const notes = [523.25, 659.25, 783.99, 1046.50]; // Do, Mi, Sol, Do alto
+      notes.forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime + idx * 0.1);
+
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime + idx * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + idx * 0.1 + 0.3);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start(audioCtx.currentTime + idx * 0.1);
+        osc.stop(audioCtx.currentTime + idx * 0.1 + 0.3);
+      });
+    }
+
+    // DATABASE QUESITI E RISPOSTE
+    const databaseStimoli = [
+      { stimolo: "Le zampe del ragno", risposta: "8" },
+      { stimolo: "I lati di un decagono", risposta: "10" },
+      { stimolo: "Grandi matematici: Creò il teorema sull'ipotenusa", risposta: "Pitagora" },
+      { stimolo: "Grandi matematici: La famosa sequenza dei conigli", risposta: "Fibonacci" },
+      { stimolo: "Grandi matematici: Disse 'Eppur si muove!'", risposta: "Galileo" },
+      { stimolo: "Numero di gradi di un angolo piatto", risposta: "180" },
+      { stimolo: "I minuti in un'ora", risposta: "60" },
+      { stimolo: "Il lato più lungo di un triangolo rettangolo", risposta: "Ipotenusa" },
+      { stimolo: "Poligono con 3 lati e 3 angoli", risposta: "Triangolo" },
+      { stimolo: "I giorni di un anno bisestile", risposta: "366" },
+      { stimolo: "La somma di tutti i lati di un poligono", risposta: "Perimetro" },
+      { stimolo: "La misura della superficie interna", risposta: "Area" },
+      { stimolo: "I lati di un ettagono", risposta: "7" },
+      { stimolo: "7 x 8", risposta: "56" },
+      { stimolo: "I vertici di una piramide a base quadrata", risposta: "5" },
+      { stimolo: "Un angolo che misura esattamente 90 gradi", risposta: "Retto" },
+      { stimolo: "Numero di gradi di un angolo giro", risposta: "360" },
+      { stimolo: "Il triplo di 15", risposta: "45" },
+      { stimolo: "L'unico numero primo pari", risposta: "2" },
+      { stimolo: "Un decimo di 1000", risposta: "100" },
+      { stimolo: "I lati di un pentagono", risposta: "5" },
+      { stimolo: "Radice quadrata di 81", risposta: "9" },
+      { stimolo: "9 x 6", risposta: "54" },
+      { stimolo: "I millimetri in un metro", risposta: "1000" },
+      { stimolo: "Un angolo minore di 90 gradi", risposta: "Acuto" },
+      { stimolo: "Un angolo maggiore di 90 gradi", risposta: "Ottuso" },
+      { stimolo: "Il risultato della moltiplicazione", risposta: "Prodotto" },
+      { stimolo: "Il risultato della divisione", risposta: "Quoziente" },
+      { stimolo: "Il cubo di 3 (3x3x3)", risposta: "27" },
+      { stimolo: "Le settimane in un anno", risposta: "52" },
+      { stimolo: "100 diviso 4", risposta: "25" },
+      { stimolo: "Numero dei pianeti del Sistema Solare", risposta: "8" }
+    ];
+
+    let items = [...databaseStimoli];
+    let isSpinning = false;
+    let currentRotation = 0;
+    let lastSliceIndex = -1;
+    const history = [];
+
+    const colors = [
+      '#ef4444', '#f97316', '#f59e0b', '#84cc16', 
+      '#10b981', '#06b6d4', '#0ea5e9', '#6366f1', 
+      '#8b5cf6', '#d946ef', '#ec4899', '#f43f5e'
+    ];
+
+    const canvas = document.getElementById('wheelCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function updateCounts() {
+      document.getElementById('remainingCount').innerText = items.length;
+      document.getElementById('totalCount').innerText = databaseStimoli.length;
+    }
+
+    function drawWheel() {
+      const numSlices = items.length;
+      const radius = canvas.width / 2;
+      const sliceAngle = (2 * Math.PI) / numSlices;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (numSlices === 0) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 22px Fredoka, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText("Tutti i quesiti completati!", radius, radius);
+        return;
+      }
+
+      for (let i = 0; i < numSlices; i++) {
+        const angle = currentRotation + i * sliceAngle;
+        
+        ctx.beginPath();
+        ctx.moveTo(radius, radius);
+        ctx.arc(radius, radius, radius - 8, angle, angle + sliceAngle);
+        ctx.closePath();
+
+        ctx.fillStyle = colors[i % colors.length];
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#0f172a';
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(radius, radius);
+        ctx.rotate(angle + sliceAngle / 2);
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 24px Fredoka, sans-serif';
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 4;
+        
+        ctx.fillText("?", radius - 30, 0);
+        ctx.restore();
+      }
+
+      ctx.beginPath();
+      ctx.arc(radius, radius, 36, 0, 2 * Math.PI);
+      ctx.fillStyle = '#0f172a';
+      ctx.fill();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#fbbf24';
+      ctx.stroke();
+
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 18px Fredoka, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText("MATH", radius, radius);
+    }
+
+    function spinWheel() {
+      if (isSpinning || items.length === 0) return;
+
+      isSpinning = true;
+      document.getElementById('spinBtn').disabled = true;
+
+      const numSlices = items.length;
+      const sliceAngle = (2 * Math.PI) / numSlices;
+      const selectedIndex = Math.floor(Math.random() * numSlices);
+      
+      const extraRounds = 5 + Math.floor(Math.random() * 3);
+      const targetSliceAngle = (2 * Math.PI) - (selectedIndex * sliceAngle) - (sliceAngle / 2);
+      const targetRotation = currentRotation + (extraRounds * 2 * Math.PI) + (targetSliceAngle - (currentRotation % (2 * Math.PI)));
+
+      const duration = 4000;
+      const startTime = performance.now();
+      const startRotation = currentRotation;
+
+      function animate(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+        
+        currentRotation = startRotation + (targetRotation - startRotation) * easeOut(progress);
+        
+        const normalizedAngle = (2 * Math.PI - (currentRotation % (2 * Math.PI))) % (2 * Math.PI);
+        const currentSliceIndex = Math.floor(normalizedAngle / sliceAngle);
+        if (currentSliceIndex !== lastSliceIndex) {
+          playTickSound();
+          lastSliceIndex = currentSliceIndex;
+        }
+
+        drawWheel();
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          isSpinning = false;
+          handleSpinComplete(selectedIndex);
+        }
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    function handleSpinComplete(index) {
+      const extracted = items[index];
+      history.unshift(extracted);
+      updateHistoryUI();
+
+      playWinSound();
+
+      document.getElementById('modalQuestion').innerText = `"${extracted.stimolo}"`;
+      
+      const modal = document.getElementById('resultModal');
+      modal.classList.remove('opacity-0', 'pointer-events-none');
+      modal.children[0].classList.remove('scale-90');
+      modal.children[0].classList.add('scale-100');
+
+      if (typeof confetti === 'function') {
+        confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      }
+
+      items.splice(index, 1);
+      updateCounts();
+      drawWheel();
+    }
+
+    function updateHistoryUI() {
+      const list = document.getElementById('historyList');
+      if (history.length === 0) {
+        list.innerHTML = '<li class="text-slate-500 italic text-sm text-center py-8">Nessun quesito estratto finora.</li>';
+        return;
+      }
+
+      list.innerHTML = history.map((item, i) => `
+        <li class="bg-slate-900/80 p-3 rounded-xl border border-slate-700/50 flex justify-between items-center text-sm">
+          <span class="text-slate-200 font-medium">${item.stimolo}</span>
+          <span class="bg-indigo-950 text-indigo-300 border border-indigo-500/30 font-bold px-2 py-0.5 rounded text-xs">#${history.length - i}</span>
+        </li>
+      `).join('');
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('resultModal');
+      modal.classList.add('opacity-0', 'pointer-events-none');
+      modal.children[0].classList.remove('scale-100');
+      modal.children[0].classList.add('scale-90');
+      document.getElementById('spinBtn').disabled = false;
+    }
+
+    function resetGame() {
+      if (confirm("Vuoi davvero ripristinare tutti i quesiti sulla ruota?")) {
+        items = [...databaseStimoli];
+        history.length = 0;
+        currentRotation = 0;
+        updateCounts();
+        updateHistoryUI();
+        drawWheel();
+        document.getElementById('spinBtn').disabled = false;
+      }
+    }
+
+    // GENERATORE SCHEDE STAMPA (1 SCHEDA PER PAGINA A4 ORIZZONTALE)
+    function generatePrintableCards() {
+      const printArea = document.getElementById('printArea');
+      printArea.innerHTML = '';
+
+      const allAnswers = databaseStimoli.map(d => d.risposta);
+      const totalStudents = 24;
+
+      for (let cardNum = 1; cardNum <= totalStudents; cardNum++) {
+        const pageDiv = document.createElement('div');
+        pageDiv.className = 'page-container';
+
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'card-print';
+
+        // Estrai 6 risposte casuali
+        const shuffledAnswers = [...allAnswers].sort(() => 0.5 - Math.random());
+        const selectedAnswers = shuffledAnswers.slice(0, 6);
+
+        // Posiziona in una griglia 5x5
+        const cellIndices = Array.from({length: 25}, (_, i) => i).sort(() => 0.5 - Math.random());
+        const answerMap = new Map();
+        selectedAnswers.forEach((ans, idx) => {
+          answerMap.set(cellIndices[idx], ans);
+        });
+
+        // Costruisci la tabella HTML
+        let tableHtml = '<table class="tombola-table">';
+        for (let row = 0; row < 5; row++) {
+          tableHtml += '<tr>';
+          for (let col = 0; col < 5; col++) {
+            const cellIdx = row * 5 + col;
+            if (answerMap.has(cellIdx)) {
+              tableHtml += `<td>${answerMap.get(cellIdx)}</td>`;
+            } else {
+              tableHtml += `<td class="empty-cell"></td>`;
+            }
+          }
+          tableHtml += '</tr>';
+        }
+        tableHtml += '</table>';
+
+        cardDiv.innerHTML = `
+          <div class="card-header">
+            <strong style="font-size: 18pt; font-family: sans-serif;">TOMBOLA DELLA MATEMATICA</strong>
+            <span style="font-size: 14pt; font-family: sans-serif; font-weight: bold;">Scheda N° ${cardNum}</span>
+          </div>
+          <div style="font-size: 13pt; font-family: sans-serif; margin-bottom: 12px; font-weight: 600;">Alunno/a: ____________________________________</div>
+          ${tableHtml}
+        `;
+
+        pageDiv.appendChild(cardDiv);
+        printArea.appendChild(pageDiv);
+      }
+
+      window.print();
+    }
+
+    // Inizializzazione
+    updateCounts();
+    drawWheel();
+  </script>
+</body>
+</html>
